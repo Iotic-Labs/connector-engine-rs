@@ -1,0 +1,8 @@
+.vscode
+/target
+/tmp
+spec.yaml
+.env
+.terraform
+*.lock.hcl
+*.sh

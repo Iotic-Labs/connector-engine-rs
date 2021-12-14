@@ -1,0 +1,49 @@
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+DOCKER_TAG_PREFIX = "quay.io/iotic_labs"
+
+[tasks.format]
+command = "cargo"
+args = ["fmt", "--verbose", "--", "--check"]
+
+[tasks.check]
+command = "cargo"
+args = ["check", "--verbose"]
+
+[tasks.clippy]
+command = "cargo"
+args = ["clippy", "--all-targets", "--all-features", "--verbose", "--", "-D", "warnings"]
+
+[tasks.test]
+command = "cargo"
+args = ["test", "--verbose"]
+
+[tasks.audit]
+command = "cargo"
+args = ["audit"]
+
+[tasks.ci-flow]
+dependencies = [
+    "format",
+    "check",
+    "clippy",
+    "test"
+]
+
+# NOTE: run docker login manually; CI build assumes docker login has been done
+
+[tasks.docker]
+description = "Builds docker image"
+env_files = ["./config.env"]
+condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/config.env"], env_set = ["DOCKER_TAG_PREFIX", "GO_PIPELINE_LABEL"] }
+command = "docker"
+# task is ran inside the workspace directory, so need to refer to the parent directory
+args = ["build", "-f", "../Dockerfile", "--tag", "${DOCKER_TAG_PREFIX}/${DOCKER_IMAGE}:${GO_PIPELINE_LABEL}", "--build-arg", "CONNECTOR=${CARGO_MAKE_PROJECT_NAME}", "../"]
+
+[tasks.publish]
+description = "Publishes docker image"
+env_files = ["./config.env"]
+condition = { files_exist = ["${CARGO_MAKE_WORKING_DIRECTORY}/config.env"], env_set = ["DOCKER_TAG_PREFIX", "GO_PIPELINE_LABEL"] }
+command = "docker"
+# task is ran inside the workspace directory, so need to refer to the parent directory
+args = ["push", "${DOCKER_TAG_PREFIX}/${DOCKER_IMAGE}:${GO_PIPELINE_LABEL}"]
