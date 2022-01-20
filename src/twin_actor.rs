@@ -1,31 +1,29 @@
 use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, WrapFuture};
 use log::{debug, error};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use iotics_grpc_client::common::{Channel, LangLiteral};
-use iotics_grpc_client::twin::upsert::upsert_twin;
-use iotics_grpc_client::twin::{share_data_with_client, update_twin, FeedApiClient, TwinApiClient};
+use iotics_grpc_client::common::{Channel, PropertyUpdate};
+use iotics_grpc_client::twin::crud::update_twin_with_client;
+use iotics_grpc_client::twin::share::share_data_with_client;
+use iotics_grpc_client::twin::upsert::upsert_twin_with_client;
+use iotics_grpc_client::twin::{FeedApiClient, TwinApiClient};
 use iotics_identity::create_twin_did_with_control_delegation;
 
-use crate::messages::TwinProperties;
+use crate::config::AuthBuilder;
+use crate::messages::{Cleanup, TwinCreated, TwinData, TwinProperties};
+use crate::model_actor::ModelActor;
 use crate::{
-    config::ApiConfig,
     constants::AGENT_TWIN_NAME,
     messages::{ShareConcurrencyReduction, TwinConcurrencyReduction},
     model::Model,
     twin::Twin,
 };
 
-use super::{
-    messages::{Cleanup, TwinCreated, TwinData},
-    model_actor::ModelActor,
-};
-
 #[derive(Debug)]
 pub struct TwinActor {
     model_addr: Addr<ModelActor>,
-    api_config: ApiConfig,
-    token: String,
+    auth_builder: Arc<AuthBuilder>,
     twin: Twin,
     model: Model,
     twin_channel: TwinApiClient<Channel>,
@@ -37,8 +35,7 @@ pub struct TwinActor {
 impl TwinActor {
     pub fn new(
         model_addr: Addr<ModelActor>,
-        api_config: ApiConfig,
-        token: String,
+        auth_builder: Arc<AuthBuilder>,
         twin: Twin,
         model: Model,
         twin_channel: TwinApiClient<Channel>,
@@ -46,8 +43,7 @@ impl TwinActor {
     ) -> Self {
         Self {
             model_addr,
-            api_config,
-            token,
+            auth_builder,
             twin,
             model,
             twin_channel,
@@ -66,37 +62,33 @@ impl Actor for TwinActor {
 
         let addr = ctx.address();
 
-        let api_config = self.api_config.clone();
-        let token = self.token.clone();
+        let auth_builder = self.auth_builder.clone();
         let twin = self.twin.clone();
-        let twin_label = twin.label.clone();
         let model = self.model.clone();
         let model_addr = self.model_addr.clone();
         let mut twin_channel = self.twin_channel.clone();
 
         let fut = async move {
-            let properties = model.get_twin_properties(&twin.model_did);
+            let properties = model.build_twin_properties(&twin.model_did, &twin.label);
+
             let result = async {
+                let identity_config = auth_builder
+                    .get_identity_config()
+                    .expect("failed to get the identity config");
                 let twin_did = create_twin_did_with_control_delegation(
-                    &api_config.identity_config,
+                    &identity_config,
                     &twin.seed,
                     AGENT_TWIN_NAME,
                 )?;
 
-                let labels = vec![LangLiteral {
-                    lang: "en".to_string(),
-                    value: twin.label.to_string(),
-                }];
-
-                upsert_twin(
+                upsert_twin_with_client(
+                    auth_builder,
                     &mut twin_channel,
-                    &token,
                     &twin_did,
-                    labels,
                     properties,
                     model.get_feeds(false),
                     twin.location,
-                    model.visibility as i32,
+                    model.get_visibility() as i32,
                 )
                 .await?;
 
@@ -114,7 +106,7 @@ impl Actor for TwinActor {
                         .try_send(TwinConcurrencyReduction { twin_seed: None })
                         .expect("failed to send TwinConcurrencyReduction message");
 
-                    panic!("failed to create twin {}, {}", twin_label, e);
+                    panic!("failed to create twin {}, {}", &twin.label, e);
                 }
             }
         }
@@ -155,7 +147,7 @@ impl Handler<TwinData> for TwinActor {
         let model_addr = self.model_addr.clone();
         self.last_data_received_at = SystemTime::now();
 
-        let token = self.token.clone();
+        let auth_builder = self.auth_builder.clone();
         let label = self.twin.label.clone();
         let twin_did = twin_did.clone();
         let mut feed_channel = self.feed_channel.clone();
@@ -165,8 +157,8 @@ impl Handler<TwinData> for TwinActor {
                 let data = feed_data.to_string().as_bytes().to_vec();
 
                 let result = share_data_with_client(
+                    auth_builder.clone(),
                     &mut feed_channel,
-                    &token,
                     &twin_did,
                     feed_id,
                     data,
@@ -202,17 +194,28 @@ impl Handler<TwinProperties> for TwinActor {
         // because we're not sharing data until the twin is created
         let twin_did = self.twin_did.as_ref().expect("this should not happen");
 
-        let token = self.token.clone();
+        let auth_builder = self.auth_builder.clone();
         let twin_did = twin_did.clone();
         let mut twin_channel = self.twin_channel.clone();
 
         let fut = async move {
-            let result = update_twin(
+            let deleted_by_key = message
+                .properties
+                .clone()
+                .into_iter()
+                .map(|p| p.key)
+                .collect();
+
+            let result = update_twin_with_client(
+                auth_builder,
                 &mut twin_channel,
-                &token,
                 &twin_did,
-                message.properties.clone(),
-                false,
+                PropertyUpdate {
+                    cleared_all: false,
+                    added: message.properties.clone(),
+                    deleted_by_key,
+                    ..Default::default()
+                },
             )
             .await;
 

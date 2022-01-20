@@ -1,14 +1,87 @@
-pub use iotics_identity::{create_agent_auth_token, Config, IdentityLibError};
+use std::sync::{Arc, Mutex};
+
+use iotics_grpc_client::auth_builder::IntoAuthBuilder;
+use iotics_identity::{create_agent_auth_token, Config};
 
 use crate::constants::AGENT_KEY_NAME;
 
 #[derive(Debug, Clone)]
-pub struct ApiConfig {
-    pub host_address: String,
-    pub identity_config: Config,
+pub struct AuthBuilder {
+    api_config: Arc<Mutex<ApiConfig>>,
+    token: Arc<Mutex<Option<String>>>,
 }
 
-pub fn get_api_config() -> ApiConfig {
+impl AuthBuilder {
+    pub fn new() -> Arc<Self> {
+        let api_config = get_api_config();
+
+        Arc::new(Self {
+            api_config: Arc::new(Mutex::new(api_config)),
+            token: Arc::new(Mutex::new(None)),
+        })
+    }
+
+    pub fn get_identity_config(&self) -> Result<Config, anyhow::Error> {
+        let api_config_lock = self
+            .api_config
+            .lock()
+            .map_err(|_| anyhow::anyhow!("failed to lock the settings mutex"))?;
+
+        Ok(api_config_lock.identity_config.clone())
+    }
+}
+
+impl IntoAuthBuilder for AuthBuilder {
+    fn get_host(&self) -> Result<String, anyhow::Error> {
+        let api_config_lock = self
+            .api_config
+            .lock()
+            .map_err(|_| anyhow::anyhow!("failed to lock the settings mutex"))?;
+
+        Ok(api_config_lock.host_address.clone())
+    }
+
+    fn get_token(&self) -> Result<String, anyhow::Error> {
+        let mut token_lock = self
+            .token
+            .lock()
+            .map_err(|_| anyhow::anyhow!("failed to lock the token mutex"))?;
+
+        if token_lock.is_none() {
+            let api_config_lock = self
+                .api_config
+                .lock()
+                .map_err(|_| anyhow::anyhow!("failed to lock the settings mutex"))?;
+
+            let identity_config = Config {
+                resolver_address: api_config_lock.identity_config.resolver_address.clone(),
+                token_duration: api_config_lock.identity_config.token_duration as i64,
+                user_did: api_config_lock.identity_config.user_did.clone(),
+                agent_did: api_config_lock.identity_config.agent_did.clone(),
+                agent_key_name: api_config_lock.identity_config.agent_key_name.clone(),
+                agent_name: api_config_lock.identity_config.agent_name.clone(),
+                agent_secret: api_config_lock.identity_config.agent_secret.clone(),
+            };
+
+            let token = create_agent_auth_token(&identity_config)?;
+            let token = format!("bearer {}", token);
+
+            token_lock.replace(token);
+        }
+
+        let token = token_lock.as_ref().expect("this should never happen");
+
+        Ok(token.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ApiConfig {
+    host_address: String,
+    identity_config: Config,
+}
+
+fn get_api_config() -> ApiConfig {
     dotenv::dotenv().ok();
 
     let parse_env = |key: &str| -> String {
@@ -29,9 +102,4 @@ pub fn get_api_config() -> ApiConfig {
                 .expect("Failed to parse duration"),
         },
     }
-}
-
-pub fn get_token(api_config: &ApiConfig) -> Result<String, IdentityLibError> {
-    let token = create_agent_auth_token(&api_config.identity_config)?;
-    Ok(format!("bearer {}", token))
 }

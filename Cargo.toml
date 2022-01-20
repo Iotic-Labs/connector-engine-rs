@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 actix = "0.12"
-actix-rt = "2.5"
+actix-rt = "2.6"
 anyhow = "1.0"
 async-trait = "0.1"
 dotenv = "0.15"
@@ -17,7 +17,7 @@ tokio = { version = "1.15", features = ["macros", "rt-multi-thread", "time"] }
 
 # use this if you want to be able to change both repos in the same time
 # iotics-grpc-client = { path = "../../iotics-grpc-client-rust" }
-iotics-grpc-client = { git = "https://github.com/Iotic-Labs/iotics-grpc-client-rs.git", rev = "5e3a1e9a2320fc08116ca01bf7b0ad051be808a4" }
+iotics-grpc-client = "0.2"
 
 # use this if you want to be able to change both repos in the same time
 # iotics-identity = { path = "../iotics-identity-go/ffi/rust" }

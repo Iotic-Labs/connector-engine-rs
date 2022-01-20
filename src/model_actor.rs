@@ -10,14 +10,14 @@ use log::{debug, error, info, warn};
 use serde_json::json;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-use iotics_grpc_client::common::{Channel, LangLiteral};
-use iotics_grpc_client::twin::upsert::upsert_twin;
+use iotics_grpc_client::common::Channel;
+use iotics_grpc_client::twin::share::share_data_with_client;
+use iotics_grpc_client::twin::upsert::upsert_twin_with_client;
 use iotics_grpc_client::twin::{
-    create_feed_api_client, create_twin_api_client, share_data_with_client, FeedApiClient,
-    TwinApiClient,
+    create_feed_api_client, create_twin_api_client, FeedApiClient, TwinApiClient,
 };
 
-use crate::config::{get_api_config, get_token, ApiConfig};
+use crate::config::AuthBuilder;
 use crate::connector::Connector;
 use crate::constants::{
     AGENT_TWIN_NAME, CONCURRENT_NEW_TWINS_LIMIT, CONCURRENT_SHARES_LIMIT, NEW_TWINS_SHARE_TICK_CAP,
@@ -39,11 +39,10 @@ pub struct TwinActorInfo {
 
 #[derive(Debug)]
 pub struct ModelActor {
-    pub api_config: ApiConfig,
-    pub token: String,
-    pub model: Model,
-    pub data_getter: Arc<dyn Connector>,
-    pub fetch_every_secs: u64,
+    auth_builder: Arc<AuthBuilder>,
+    model: Model,
+    data_getter: Arc<dyn Connector>,
+    fetch_every_secs: u64,
     twins: HashMap<String, TwinActorInfo>,
     twin_channel: Option<TwinApiClient<Channel>>,
     feed_channel: Option<FeedApiClient<Channel>>,
@@ -54,12 +53,10 @@ pub struct ModelActor {
 
 impl ModelActor {
     pub fn new(model: Model, fetch_every_secs: u64, data_getter: Arc<dyn Connector>) -> Self {
-        let api_config = get_api_config();
-        let token = get_token(&api_config).expect("failed to create auth token");
+        let auth_builder = AuthBuilder::new();
 
         Self {
-            api_config,
-            token,
+            auth_builder,
             model,
             fetch_every_secs,
             data_getter,
@@ -81,12 +78,12 @@ impl Actor for ModelActor {
         let model_label = self.model.get_label();
         info!("[{}] Model actor started", &model_label);
 
-        let host_address = self.api_config.host_address.clone();
+        let auth_builder = self.auth_builder.clone();
         let addr = ctx.address();
 
         // create the channels
         let fut = async move {
-            let twin_channel = create_twin_api_client(&host_address)
+            let twin_channel = create_twin_api_client(auth_builder.clone())
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
@@ -94,7 +91,7 @@ impl Actor for ModelActor {
                         &model_label, e
                     )
                 });
-            let feed_channel = create_feed_api_client(&host_address)
+            let feed_channel = create_feed_api_client(auth_builder)
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
@@ -136,10 +133,11 @@ impl Handler<ChannelsCreatedMessage> for ModelActor {
 
         let addr = ctx.address();
 
-        let identity_config = self.api_config.identity_config.clone();
-        let token = self.token.clone();
+        let auth_builder = self.auth_builder.clone();
+        let identity_config = auth_builder
+            .get_identity_config()
+            .expect("failed to get identity config");
         let model = self.model.clone();
-        let model_label = self.model.get_label();
         let fetch_every_secs = self.fetch_every_secs;
 
         // upsert the model and start the update interval
@@ -151,25 +149,21 @@ impl Handler<ChannelsCreatedMessage> for ModelActor {
                     AGENT_TWIN_NAME,
                 )?;
 
-                let labels = vec![LangLiteral {
-                    lang: "en".to_string(),
-                    value: model_label.to_string(),
-                }];
-
-                upsert_twin(
+                upsert_twin_with_client(
+                    auth_builder,
                     &mut twin_channel,
-                    &token,
                     &model_did,
-                    labels,
-                    model.model_properties.clone(),
+                    model.get_model_properties().clone(),
                     model.get_feeds(true),
                     None,
-                    model.visibility as i32,
+                    model.get_visibility() as i32,
                 )
                 .await?;
 
                 Ok::<String, anyhow::Error>(model_did)
             };
+
+            let model_label = model.get_label();
 
             match result.await {
                 Ok(model_did) => {
@@ -342,8 +336,7 @@ impl Handler<TwinData> for ModelActor {
 
             let twin_actor = TwinActor::new(
                 ctx.address(),
-                self.api_config.clone(),
-                self.token.clone(),
+                self.auth_builder.clone(),
                 Twin::new(
                     message.model_did.clone(),
                     twin_seed.clone(),
@@ -430,7 +423,7 @@ impl Handler<HeartbeatData> for ModelActor {
         let model_label = self.model.get_label();
 
         let model_did = message.model_did.clone();
-        let token = self.token.clone();
+        let auth_builder = self.auth_builder.clone();
 
         let data = json!({
             "timestamp": OffsetDateTime::now_utc()
@@ -444,8 +437,8 @@ impl Handler<HeartbeatData> for ModelActor {
 
         let fut = async move {
             let result = share_data_with_client(
+                auth_builder,
                 &mut feed_channel,
-                &token,
                 &model_did,
                 "heartbeat",
                 data,

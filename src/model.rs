@@ -1,18 +1,18 @@
+use iotics_grpc_client::properties::PropertyBuilder;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-use iotics_grpc_client::common::{FeedValue, LangLiteral, Property, Visibility};
-use iotics_grpc_client::twin::upsert::UpsertFeedWithMeta;
+use iotics_grpc_client::common::{FeedValue, Property, Visibility};
+use iotics_grpc_client::properties::common_keys;
+use iotics_grpc_client::twin::UpsertFeedWithMeta;
 
-use crate::connector::{literal_value_factory, uri_value_factory};
-use crate::constants::predicate::{CREATED_AT_PROPERTY, MODEL_PROPERTY, UPDATED_AT_PROPERTY};
-use crate::constants::MAX_LABEL_LENGTH;
+use crate::constants::{LANGUAGE, MAX_LABEL_LENGTH};
 
 #[derive(Debug, Clone)]
 pub struct Model {
-    pub seed_prefix: String,
-    pub label_prefix: String,
-    pub visibility: Visibility,
-    pub model_properties: Vec<Property>,
+    seed_prefix: String,
+    label_prefix: String,
+    visibility: Visibility,
+    model_properties: Vec<Property>,
     feeds: Vec<UpsertFeedWithMeta>,
     twin_properties: Vec<Property>,
 }
@@ -44,6 +44,10 @@ impl Model {
         format!("{} Model", self.label_prefix)
     }
 
+    pub fn get_visibility(&self) -> Visibility {
+        self.visibility
+    }
+
     pub fn get_twin_seed(&self, twin_id: &str) -> String {
         format!("{} {}", self.seed_prefix, twin_id)
     }
@@ -69,10 +73,6 @@ impl Model {
 
                 feeds.push(UpsertFeedWithMeta {
                     id: "heartbeat".to_string(),
-                    labels: vec![LangLiteral {
-                        lang: "en".to_string(),
-                        value: "Heartbeat".to_string(),
-                    }],
                     store_last: true,
                     values: vec![
                         FeedValue {
@@ -88,7 +88,7 @@ impl Model {
                             unit: "http://qudt.org/vocab/unit/NUM".to_string(),
                         },
                     ],
-                    ..Default::default()
+                    properties: vec![PropertyBuilder::build_label(LANGUAGE, "Heartbeat")],
                 });
 
                 feeds
@@ -97,7 +97,14 @@ impl Model {
         }
     }
 
-    pub fn get_twin_properties(&self, model_did: &str) -> Vec<Property> {
+    pub fn get_model_properties(&self) -> &Vec<Property> {
+        &self.model_properties
+    }
+
+    /// Builds the twin properties by setting values for the following fields
+    /// label, model, created_at, updated_at
+    /// IF they were passed `twin_properties` when the `Model` instance was created
+    pub fn build_twin_properties(&self, model_did: &str, twin_label: &str) -> Vec<Property> {
         let time_now = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .expect("this should not happen");
@@ -107,24 +114,27 @@ impl Model {
             .into_iter()
             .map(|property| {
                 let property = match property.key.as_str() {
-                    MODEL_PROPERTY => Property {
-                        key: MODEL_PROPERTY.to_string(),
-                        value: Some(uri_value_factory(model_did.to_string())),
-                    },
-                    CREATED_AT_PROPERTY => Property {
-                        key: CREATED_AT_PROPERTY.to_string(),
-                        value: Some(literal_value_factory(
-                            "dateTime".to_owned(),
-                            time_now.clone(),
-                        )),
-                    },
-                    UPDATED_AT_PROPERTY => Property {
-                        key: UPDATED_AT_PROPERTY.to_string(),
-                        value: Some(literal_value_factory(
-                            "dateTime".to_owned(),
-                            time_now.clone(),
-                        )),
-                    },
+                    common_keys::predicate::LABEL => {
+                        PropertyBuilder::build_label(LANGUAGE, twin_label)
+                    }
+                    common_keys::predicate::MODEL_PROPERTY => PropertyBuilder::build_uri_value(
+                        common_keys::predicate::MODEL_PROPERTY,
+                        model_did,
+                    ),
+                    common_keys::predicate::CREATED_AT_PROPERTY => {
+                        PropertyBuilder::build_literal_value(
+                            common_keys::predicate::CREATED_AT_PROPERTY,
+                            "dateTime",
+                            &time_now,
+                        )
+                    }
+                    common_keys::predicate::UPDATED_AT_PROPERTY => {
+                        PropertyBuilder::build_literal_value(
+                            common_keys::predicate::UPDATED_AT_PROPERTY,
+                            "dateTime",
+                            &time_now,
+                        )
+                    }
                     _ => property,
                 };
 
