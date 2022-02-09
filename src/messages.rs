@@ -1,7 +1,7 @@
 use actix::Message;
 use std::time::SystemTime;
 
-use iotics_grpc_client::common::{Channel, Property};
+use iotics_grpc_client::common::Channel;
 use iotics_grpc_client::twin::{FeedApiClient, TwinApiClient};
 
 use crate::connector::ConnectorData;
@@ -25,12 +25,6 @@ pub struct TwinData {
     pub model_did: String,
     pub data: ConnectorData,
     pub expire_time: SystemTime,
-}
-
-#[derive(Debug, Message, Clone)]
-#[rtype(result = "()")]
-pub struct TwinProperties {
-    pub properties: Vec<Property>,
 }
 
 #[derive(Debug, Message, Clone)]

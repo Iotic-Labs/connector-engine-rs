@@ -11,7 +11,7 @@ use iotics_grpc_client::twin::{FeedApiClient, TwinApiClient};
 use iotics_identity::create_twin_did_with_control_delegation;
 
 use crate::config::AuthBuilder;
-use crate::messages::{Cleanup, TwinCreated, TwinData, TwinProperties};
+use crate::messages::{Cleanup, TwinCreated, TwinData};
 use crate::model_actor::ModelActor;
 use crate::{
     constants::AGENT_TWIN_NAME,
@@ -150,6 +150,8 @@ impl Handler<TwinData> for TwinActor {
         let auth_builder = self.auth_builder.clone();
         let label = self.twin.label.clone();
         let twin_did = twin_did.clone();
+
+        let mut twin_channel = self.twin_channel.clone();
         let mut feed_channel = self.feed_channel.clone();
 
         let fut = async move {
@@ -173,60 +175,44 @@ impl Handler<TwinData> for TwinActor {
                 }
             }
 
+            if !message.data.properties.is_empty() {
+                let deleted_by_key = message
+                    .data
+                    .properties
+                    .clone()
+                    .into_iter()
+                    .map(|p| p.key)
+                    .collect();
+
+                let result = update_twin_with_client(
+                    auth_builder,
+                    &mut twin_channel,
+                    &twin_did,
+                    PropertyUpdate {
+                        cleared_all: false,
+                        added: message.data.properties.clone(),
+                        deleted_by_key,
+                        ..Default::default()
+                    },
+                )
+                .await;
+
+                if let Err(e) = result {
+                    error!(
+                        "failed to update properties of twin {} {:?}. Properties: {:?}",
+                        &twin_did, e, message.data.properties
+                    );
+                } else {
+                    debug!("Twin {} properties updated", &twin_did);
+                }
+            }
+
             // Send the ShareConcurrencyReduction message to the model actor
             model_addr
                 .try_send(ShareConcurrencyReduction {
                     amount: message.data.feeds.len(),
                 })
                 .expect("failed to send ShareConcurrencyReduction message");
-        }
-        .into_actor(self);
-
-        ctx.spawn(fut);
-    }
-}
-
-impl Handler<TwinProperties> for TwinActor {
-    type Result = ();
-
-    fn handle(&mut self, message: TwinProperties, ctx: &mut Context<Self>) -> Self::Result {
-        // twin_did should never be None
-        // because we're not sharing data until the twin is created
-        let twin_did = self.twin_did.as_ref().expect("this should not happen");
-
-        let auth_builder = self.auth_builder.clone();
-        let twin_did = twin_did.clone();
-        let mut twin_channel = self.twin_channel.clone();
-
-        let fut = async move {
-            let deleted_by_key = message
-                .properties
-                .clone()
-                .into_iter()
-                .map(|p| p.key)
-                .collect();
-
-            let result = update_twin_with_client(
-                auth_builder,
-                &mut twin_channel,
-                &twin_did,
-                PropertyUpdate {
-                    cleared_all: false,
-                    added: message.properties.clone(),
-                    deleted_by_key,
-                    ..Default::default()
-                },
-            )
-            .await;
-
-            if let Err(e) = result {
-                error!(
-                    "failed to update properties of twin {} {:?}. Properties: {:?}",
-                    &twin_did, e, message.properties
-                );
-            } else {
-                debug!("Twin {} properties updated", &twin_did);
-            }
         }
         .into_actor(self);
 

@@ -25,7 +25,7 @@ use crate::constants::{
 };
 use crate::messages::{
     ChannelsCreatedMessage, Cleanup, GetData, HeartbeatData, ShareConcurrencyReduction,
-    TwinConcurrencyReduction, TwinData, TwinProperties,
+    TwinConcurrencyReduction, TwinData,
 };
 use crate::model::Model;
 use crate::twin::Twin;
@@ -376,12 +376,8 @@ impl Handler<TwinData> for ModelActor {
         }
 
         self.concurrent_shares += message.data.feeds.len();
-        // Share/update twin data
-        twin_actor.addr.do_send(message.clone());
-        // Share/update twin properties
-        twin_actor.addr.do_send(TwinProperties {
-            properties: message.data.properties,
-        });
+        // Share/update twin data & properties
+        twin_actor.addr.do_send(message);
     }
 }
 
