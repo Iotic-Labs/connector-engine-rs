@@ -2,6 +2,10 @@
 name = "iotics-connector-engine"
 version = "0.1.0"
 edition = "2021"
+description = "IOTICS Connector Engine"
+license = "Apache-2.0"
+repository = "https://github.com/Iotic-Labs/connector-engine-rs"
+homepage = "https://iotics.com"
 
 [dependencies]
 actix = "0.12"
