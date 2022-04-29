@@ -55,3 +55,7 @@ pub struct TwinConcurrencyReduction {
 pub struct ShareConcurrencyReduction {
     pub amount: usize,
 }
+
+#[derive(Debug, Message)]
+#[rtype(result = "()")]
+pub struct TwinDeleted;

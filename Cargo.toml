@@ -8,7 +8,7 @@ repository = "https://github.com/Iotic-Labs/connector-engine-rs"
 homepage = "https://iotics.com"
 
 [dependencies]
-actix = "0.12"
+actix = "0.13"
 actix-rt = "2.6"
 anyhow = "1.0"
 async-trait = "0.1"
