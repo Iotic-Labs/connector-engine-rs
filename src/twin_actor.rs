@@ -231,33 +231,37 @@ impl Handler<TwinDeleted> for TwinActor {
 impl Handler<Cleanup> for TwinActor {
     type Result = ();
 
-    fn handle(&mut self, _message: Cleanup, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, message: Cleanup, ctx: &mut Context<Self>) -> Self::Result {
         let expire_at = self
             .last_data_received_at
             .checked_add(Duration::from_secs(60 * 15))
             .expect("this should not happen");
 
         if SystemTime::now() > expire_at {
-            let twin_did = self.twin_did.clone().expect("This should not happen");
-            let auth_builder = self.auth_builder.clone();
-            let mut twin_channel = self.twin_channel.clone();
-            let addr = ctx.address();
+            if message.delete_twins {
+                let twin_did = self.twin_did.clone().expect("This should not happen");
+                let auth_builder = self.auth_builder.clone();
+                let mut twin_channel = self.twin_channel.clone();
+                let addr = ctx.address();
 
-            let fut = async move {
-                let result =
-                    delete_twin_with_client(auth_builder.clone(), &mut twin_channel, &twin_did)
-                        .await;
-                if let Err(e) = result {
-                    error!("Failed to delete twin {} {:?}.", &twin_did, e);
-                } else {
-                    debug!("Twin {} deleted", &twin_did);
-                    addr.try_send(TwinDeleted)
-                        .expect("Failed to send TwinDeleted message");
+                let fut = async move {
+                    let result =
+                        delete_twin_with_client(auth_builder.clone(), &mut twin_channel, &twin_did)
+                            .await;
+                    if let Err(e) = result {
+                        error!("Failed to delete twin {} {:?}.", &twin_did, e);
+                    } else {
+                        debug!("Twin {} deleted", &twin_did);
+                        addr.try_send(TwinDeleted)
+                            .expect("Failed to send TwinDeleted message");
+                    }
                 }
-            }
-            .into_actor(self);
+                .into_actor(self);
 
-            ctx.spawn(fut);
+                ctx.spawn(fut);
+            } else {
+                ctx.stop();
+            }
         }
     }
 }

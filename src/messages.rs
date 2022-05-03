@@ -42,7 +42,9 @@ pub struct TwinCreated {
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
-pub struct Cleanup;
+pub struct Cleanup {
+    pub delete_twins: bool,
+}
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
