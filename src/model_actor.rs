@@ -43,6 +43,7 @@ pub struct ModelActor {
     model: Model,
     data_getter: Arc<dyn Connector>,
     fetch_every_secs: u64,
+    delete_twins: bool,
     twins: HashMap<String, TwinActorInfo>,
     twin_channel: Option<TwinApiClient<Channel>>,
     feed_channel: Option<FeedApiClient<Channel>>,
@@ -52,7 +53,12 @@ pub struct ModelActor {
 }
 
 impl ModelActor {
-    pub fn new(model: Model, fetch_every_secs: u64, data_getter: Arc<dyn Connector>) -> Self {
+    pub fn new(
+        model: Model,
+        fetch_every_secs: u64,
+        data_getter: Arc<dyn Connector>,
+        delete_twins: bool,
+    ) -> Self {
         let auth_builder = AuthBuilder::new();
 
         Self {
@@ -60,6 +66,7 @@ impl ModelActor {
             model,
             fetch_every_secs,
             data_getter,
+            delete_twins,
             twins: HashMap::new(),
             twin_channel: None,
             feed_channel: None,
@@ -197,6 +204,7 @@ impl Handler<ChannelsCreatedMessage> for ModelActor {
         // start the cleanup timer
         let addr = ctx.address();
         let model_label = self.model.get_label();
+        let delete_twins = self.delete_twins;
 
         let fut = async move {
             // set the cleanup interval to be 3.5 bigger than the fetch interval
@@ -205,7 +213,7 @@ impl Handler<ChannelsCreatedMessage> for ModelActor {
 
             loop {
                 interval.tick().await;
-                addr.try_send(Cleanup)
+                addr.try_send(Cleanup { delete_twins })
                     .unwrap_or_else(|_| panic!("[{}] failed to send twins cleanup", &model_label));
             }
         }
@@ -465,6 +473,7 @@ impl Handler<Cleanup> for ModelActor {
         info!("[{}] Twin cleanup", &model_label);
 
         let mut to_remove = Vec::new();
+        let delete_twins = self.delete_twins;
 
         for (twin_did, twin_actor) in &self.twins {
             if !twin_actor.addr.connected() {
@@ -472,7 +481,7 @@ impl Handler<Cleanup> for ModelActor {
             } else {
                 twin_actor
                     .addr
-                    .try_send(Cleanup)
+                    .try_send(Cleanup { delete_twins })
                     .unwrap_or_else(|_| panic!("[{}] failed to send twins cleanup", &model_label));
             }
         }

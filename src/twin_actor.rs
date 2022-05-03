@@ -4,14 +4,14 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use iotics_grpc_client::common::{Channel, PropertyUpdate};
-use iotics_grpc_client::twin::crud::update_twin_with_client;
+use iotics_grpc_client::twin::crud::{delete_twin_with_client, update_twin_with_client};
 use iotics_grpc_client::twin::share::share_data_with_client;
 use iotics_grpc_client::twin::upsert::upsert_twin_with_client;
 use iotics_grpc_client::twin::{FeedApiClient, TwinApiClient};
 use iotics_identity::create_twin_did_with_control_delegation;
 
 use crate::config::AuthBuilder;
-use crate::messages::{Cleanup, TwinCreated, TwinData};
+use crate::messages::{Cleanup, TwinCreated, TwinData, TwinDeleted};
 use crate::model_actor::ModelActor;
 use crate::{
     constants::AGENT_TWIN_NAME,
@@ -220,17 +220,48 @@ impl Handler<TwinData> for TwinActor {
     }
 }
 
+impl Handler<TwinDeleted> for TwinActor {
+    type Result = ();
+
+    fn handle(&mut self, _: TwinDeleted, ctx: &mut Context<Self>) -> Self::Result {
+        ctx.stop();
+    }
+}
+
 impl Handler<Cleanup> for TwinActor {
     type Result = ();
 
-    fn handle(&mut self, _message: Cleanup, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, message: Cleanup, ctx: &mut Context<Self>) -> Self::Result {
         let expire_at = self
             .last_data_received_at
             .checked_add(Duration::from_secs(60 * 15))
             .expect("this should not happen");
 
         if SystemTime::now() > expire_at {
-            ctx.stop();
+            if message.delete_twins {
+                let twin_did = self.twin_did.clone().expect("This should not happen");
+                let auth_builder = self.auth_builder.clone();
+                let mut twin_channel = self.twin_channel.clone();
+                let addr = ctx.address();
+
+                let fut = async move {
+                    let result =
+                        delete_twin_with_client(auth_builder.clone(), &mut twin_channel, &twin_did)
+                            .await;
+                    if let Err(e) = result {
+                        error!("Failed to delete twin {} {:?}.", &twin_did, e);
+                    } else {
+                        debug!("Twin {} deleted", &twin_did);
+                        addr.try_send(TwinDeleted)
+                            .expect("Failed to send TwinDeleted message");
+                    }
+                }
+                .into_actor(self);
+
+                ctx.spawn(fut);
+            } else {
+                ctx.stop();
+            }
         }
     }
 }
