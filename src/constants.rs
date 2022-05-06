@@ -9,3 +9,5 @@ pub const RESCHEDULE_DELAY: Duration = Duration::from_millis(500);
 // this should match the label max length - see PATTERN_LABEL in https://github.com/Iotic-Labs/iotic-lib-metadata
 pub const MAX_LABEL_LENGTH: usize = 128;
 pub const LANGUAGE: &str = "en";
+// set the cleanup interval to be 3.5 bigger than the fetch interval
+pub const CLEANUP_INTERVAL_MULTIPLIER: f64 = 3.5;

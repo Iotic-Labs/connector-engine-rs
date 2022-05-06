@@ -20,8 +20,8 @@ use iotics_grpc_client::twin::{
 use crate::config::AuthBuilder;
 use crate::connector::Connector;
 use crate::constants::{
-    AGENT_TWIN_NAME, CONCURRENT_NEW_TWINS_LIMIT, CONCURRENT_SHARES_LIMIT, NEW_TWINS_SHARE_TICK_CAP,
-    RESCHEDULE_DELAY,
+    AGENT_TWIN_NAME, CLEANUP_INTERVAL_MULTIPLIER, CONCURRENT_NEW_TWINS_LIMIT,
+    CONCURRENT_SHARES_LIMIT, NEW_TWINS_SHARE_TICK_CAP, RESCHEDULE_DELAY,
 };
 use crate::messages::{
     ChannelsCreatedMessage, Cleanup, GetData, HeartbeatData, ShareConcurrencyReduction,
@@ -207,14 +207,17 @@ impl Handler<ChannelsCreatedMessage> for ModelActor {
         let delete_twins = self.delete_twins;
 
         let fut = async move {
-            // set the cleanup interval to be 3.5 bigger than the fetch interval
-            let cleanup_every_secs = (fetch_every_secs as f64 * 3.5) as u64;
-            let mut interval = interval(Duration::from_secs(cleanup_every_secs));
+            let cleanup_every_secs =
+                Duration::from_secs((fetch_every_secs as f64 * CLEANUP_INTERVAL_MULTIPLIER) as u64);
+            let mut interval = interval(cleanup_every_secs);
 
             loop {
                 interval.tick().await;
-                addr.try_send(Cleanup { delete_twins })
-                    .unwrap_or_else(|_| panic!("[{}] failed to send twins cleanup", &model_label));
+                addr.try_send(Cleanup {
+                    delete_twins,
+                    cleanup_every_secs,
+                })
+                .unwrap_or_else(|_| panic!("[{}] failed to send twins cleanup", &model_label));
             }
         }
         .into_actor(self);
@@ -468,12 +471,11 @@ impl Handler<HeartbeatData> for ModelActor {
 impl Handler<Cleanup> for ModelActor {
     type Result = ();
 
-    fn handle(&mut self, _message: Cleanup, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, message: Cleanup, _ctx: &mut Context<Self>) -> Self::Result {
         let model_label = self.model.get_label();
         info!("[{}] Twin cleanup", &model_label);
 
         let mut to_remove = Vec::new();
-        let delete_twins = self.delete_twins;
 
         for (twin_did, twin_actor) in &self.twins {
             if !twin_actor.addr.connected() {
@@ -481,7 +483,7 @@ impl Handler<Cleanup> for ModelActor {
             } else {
                 twin_actor
                     .addr
-                    .try_send(Cleanup { delete_twins })
+                    .try_send(message.clone())
                     .unwrap_or_else(|_| panic!("[{}] failed to send twins cleanup", &model_label));
             }
         }
