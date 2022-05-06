@@ -1,5 +1,5 @@
 use actix::Message;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use iotics_grpc_client::common::Channel;
 use iotics_grpc_client::twin::{FeedApiClient, TwinApiClient};
@@ -40,10 +40,11 @@ pub struct TwinCreated {
     pub twin_did: String,
 }
 
-#[derive(Debug, Message)]
+#[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
 pub struct Cleanup {
     pub delete_twins: bool,
+    pub cleanup_every_secs: Duration,
 }
 
 #[derive(Debug, Message)]

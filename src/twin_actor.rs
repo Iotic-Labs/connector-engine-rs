@@ -1,7 +1,7 @@
 use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, WrapFuture};
 use log::{debug, error};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use iotics_grpc_client::common::{Channel, PropertyUpdate};
 use iotics_grpc_client::twin::crud::{delete_twin_with_client, update_twin_with_client};
@@ -234,7 +234,7 @@ impl Handler<Cleanup> for TwinActor {
     fn handle(&mut self, message: Cleanup, ctx: &mut Context<Self>) -> Self::Result {
         let expire_at = self
             .last_data_received_at
-            .checked_add(Duration::from_secs(60 * 15))
+            .checked_add(message.cleanup_every_secs)
             .expect("this should not happen");
 
         if SystemTime::now() > expire_at {
