@@ -1,5 +1,5 @@
 use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, WrapFuture};
-use log::{debug, error};
+use log::{debug, error, warn};
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -11,7 +11,7 @@ use iotics_grpc_client::twin::{FeedApiClient, TwinApiClient};
 use iotics_identity::create_twin_did_with_control_delegation;
 
 use crate::config::AuthBuilder;
-use crate::messages::{Cleanup, TwinCreated, TwinData, TwinDeleted};
+use crate::messages::{Cleanup, TwinCreationFailure, TwinCreationSuccess, TwinData, TwinDeleted};
 use crate::model_actor::ModelActor;
 use crate::{
     constants::AGENT_TWIN_NAME,
@@ -30,6 +30,8 @@ pub struct TwinActor {
     feed_channel: FeedApiClient<Channel>,
     twin_did: Option<String>,
     last_data_received_at: SystemTime,
+    creation_in_flight: bool,
+    shares_in_flight: usize,
 }
 
 impl TwinActor {
@@ -50,6 +52,8 @@ impl TwinActor {
             feed_channel,
             twin_did: None,
             last_data_received_at: SystemTime::now(),
+            creation_in_flight: false,
+            shares_in_flight: 0,
         }
     }
 }
@@ -60,12 +64,13 @@ impl Actor for TwinActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         debug!("Twin {} actor started", &self.twin.label);
 
+        self.creation_in_flight = true;
+
         let addr = ctx.address();
 
         let auth_builder = self.auth_builder.clone();
         let twin = self.twin.clone();
         let model = self.model.clone();
-        let model_addr = self.model_addr.clone();
         let mut twin_channel = self.twin_channel.clone();
 
         let fut = async move {
@@ -93,20 +98,20 @@ impl Actor for TwinActor {
                 .await?;
 
                 Ok::<String, anyhow::Error>(twin_did)
-            };
+            }
+            .await;
 
-            match result.await {
+            match result {
                 Ok(twin_did) => {
-                    addr.try_send(TwinCreated { twin_did })
-                        .expect("failed to send TwinCreated message");
+                    addr.try_send(TwinCreationSuccess { twin_did })
+                        .expect("failed to send TwinCreationSuccess message to self");
                 }
-                Err(e) => {
-                    // Send the TwinConcurrencyReduction message to the model actor
-                    model_addr
-                        .try_send(TwinConcurrencyReduction { twin_seed: None })
-                        .expect("failed to send TwinConcurrencyReduction message");
-
-                    panic!("failed to create twin {}, {}", &twin.label, e);
+                Err(error) => {
+                    addr.try_send(TwinCreationFailure {
+                        twin_label: twin.label.clone(),
+                        error,
+                    })
+                    .expect("failed to send TwinCreationFailure message to self");
                 }
             }
         }
@@ -115,15 +120,43 @@ impl Actor for TwinActor {
         ctx.spawn(fut);
     }
 
+    fn stopping(&mut self, _: &mut Self::Context) -> actix::Running {
+        debug!("Twin {} actor stopping", self.twin.label);
+
+        if self.creation_in_flight {
+            warn!("Twin {} stopped while creating", self.twin.label);
+
+            // Send the TwinConcurrencyReduction message to the model actor
+            self.model_addr
+                .try_send(TwinConcurrencyReduction {
+                    twin_seed: Some(self.twin.seed.clone()),
+                })
+                .expect("failed to send TwinConcurrencyReduction message");
+        }
+
+        if self.shares_in_flight > 0 {
+            warn!("Twin {} stopped while sharing", self.twin.label);
+
+            // Send the ShareConcurrencyReduction message to the model actor
+            self.model_addr
+                .try_send(ShareConcurrencyReduction {
+                    shares_count: self.shares_in_flight,
+                })
+                .expect("failed to send ShareConcurrencyReduction message");
+        }
+
+        actix::Running::Stop
+    }
+
     fn stopped(&mut self, _: &mut Self::Context) {
         debug!("Twin {} actor stopped", self.twin.label);
     }
 }
 
-impl Handler<TwinCreated> for TwinActor {
+impl Handler<TwinCreationSuccess> for TwinActor {
     type Result = ();
 
-    fn handle(&mut self, message: TwinCreated, _: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, message: TwinCreationSuccess, _: &mut Context<Self>) -> Self::Result {
         debug!("Twin {} actor got message {:?}", self.twin.label, message);
         self.twin_did.replace(message.twin_did);
 
@@ -133,6 +166,28 @@ impl Handler<TwinCreated> for TwinActor {
                 twin_seed: Some(self.twin.seed.clone()),
             })
             .expect("failed to send TwinConcurrencyReduction message");
+
+        self.creation_in_flight = false;
+    }
+}
+
+impl Handler<TwinCreationFailure> for TwinActor {
+    type Result = ();
+
+    fn handle(&mut self, message: TwinCreationFailure, ctx: &mut Context<Self>) -> Self::Result {
+        debug!("Twin {} actor got message {:?}", self.twin.label, message);
+
+        // Send the TwinConcurrencyReduction message to the model actor
+        self.model_addr
+            .try_send(TwinConcurrencyReduction {
+                twin_seed: Some(self.twin.seed.clone()),
+            })
+            .expect("failed to send TwinConcurrencyReduction message");
+
+        self.creation_in_flight = false;
+
+        // Stop the actor
+        ctx.stop();
     }
 }
 
@@ -144,7 +199,10 @@ impl Handler<TwinData> for TwinActor {
         // because we're not sharing data until the twin is created
         let twin_did = self.twin_did.as_ref().expect("this should not happen");
 
-        let model_addr = self.model_addr.clone();
+        let shares_count = message.data.feeds.len();
+        self.shares_in_flight += shares_count;
+
+        let addr = ctx.address();
         self.last_data_received_at = SystemTime::now();
 
         let auth_builder = self.auth_builder.clone();
@@ -207,16 +265,30 @@ impl Handler<TwinData> for TwinActor {
                 }
             }
 
-            // Send the ShareConcurrencyReduction message to the model actor
-            model_addr
-                .try_send(ShareConcurrencyReduction {
-                    amount: message.data.feeds.len(),
-                })
-                .expect("failed to send ShareConcurrencyReduction message");
+            // Send the ShareConcurrencyReduction to self
+            addr.try_send(ShareConcurrencyReduction { shares_count })
+                .expect("failed to send ShareConcurrencyReduction message to self");
         }
         .into_actor(self);
 
         ctx.spawn(fut);
+    }
+}
+
+impl Handler<ShareConcurrencyReduction> for TwinActor {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        message: ShareConcurrencyReduction,
+        _: &mut Context<Self>,
+    ) -> Self::Result {
+        // Send the ShareConcurrencyReduction message to the model actor
+        self.model_addr
+            .try_send(message.clone())
+            .expect("failed to send ShareConcurrencyReduction message");
+
+        self.shares_in_flight -= message.shares_count;
     }
 }
 

@@ -414,7 +414,7 @@ impl Handler<ShareConcurrencyReduction> for ModelActor {
         message: ShareConcurrencyReduction,
         _: &mut Context<Self>,
     ) -> Self::Result {
-        self.concurrent_shares = cmp::max(self.concurrent_shares - message.amount, 0);
+        self.concurrent_shares = cmp::max(self.concurrent_shares - message.shares_count, 0);
     }
 }
 

@@ -36,8 +36,15 @@ pub struct HeartbeatData {
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
-pub struct TwinCreated {
+pub struct TwinCreationSuccess {
     pub twin_did: String,
+}
+
+#[derive(Debug, Message)]
+#[rtype(result = "()")]
+pub struct TwinCreationFailure {
+    pub twin_label: String,
+    pub error: anyhow::Error,
 }
 
 #[derive(Debug, Message, Clone)]
@@ -53,10 +60,10 @@ pub struct TwinConcurrencyReduction {
     pub twin_seed: Option<String>,
 }
 
-#[derive(Debug, Message)]
+#[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
 pub struct ShareConcurrencyReduction {
-    pub amount: usize,
+    pub shares_count: usize,
 }
 
 #[derive(Debug, Message)]
