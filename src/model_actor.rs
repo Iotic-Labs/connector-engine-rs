@@ -386,9 +386,14 @@ impl Handler<TwinData> for ModelActor {
             return;
         }
 
-        self.concurrent_shares += message.data.feeds.len();
         // Share/update twin data & properties
-        twin_actor.addr.do_send(message);
+        let feed_shares = message.data.feeds.len();
+        let result = twin_actor.addr.try_send(message);
+
+        if result.is_ok() {
+            // Increment concurrent_shares only if the message went through
+            self.concurrent_shares += feed_shares;
+        }
     }
 }
 
