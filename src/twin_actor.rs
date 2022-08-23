@@ -92,6 +92,7 @@ impl Actor for TwinActor {
                     &twin_did,
                     properties,
                     model.get_feeds(false),
+                    Vec::new(),
                     twin.location,
                     model.get_visibility() as i32,
                 )

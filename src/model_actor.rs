@@ -162,6 +162,7 @@ impl Handler<ChannelsCreatedMessage> for ModelActor {
                     &model_did,
                     model.get_model_properties().clone(),
                     model.get_feeds(true),
+                    Vec::new(),
                     None,
                     model.get_visibility() as i32,
                 )

@@ -19,6 +19,9 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+      - uses: arduino/setup-protoc@v1
+        with:
+          version: '3.x'
       - uses: davidB/rust-cargo-make@v1
       - uses: actions/checkout@v2
       - name: Run format
