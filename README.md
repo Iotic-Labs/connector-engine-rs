@@ -12,7 +12,6 @@ A framework that greatly simplifies the process of writing high-performance, sca
 - [cargo-make][cargo-make]
 - [Golang][golang]
 - [Clang][clang]
-- Rename `.env.sample` to `.env` and give values to all those variables.
 
 ## Example
 
