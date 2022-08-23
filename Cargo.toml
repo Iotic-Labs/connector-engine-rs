@@ -7,6 +7,10 @@ license = "Apache-2.0"
 repository = "https://github.com/Iotic-Labs/connector-engine-rs"
 homepage = "https://iotics.com"
 
+[features]
+default = []
+tls = ["iotics-grpc-client/tls"]
+
 [dependencies]
 actix = "0.13"
 actix-rt = "2.7"
@@ -21,7 +25,7 @@ tokio = { version = "1.20", features = ["macros", "rt-multi-thread", "time"] }
 
 # use this if you want to be able to change both repos in the same time
 # iotics-grpc-client = { path = "../../iotics-grpc-client-rust" }
-iotics-grpc-client = "0.2"
+iotics-grpc-client = "0.3"
 
 # use this if you want to be able to change both repos in the same time
 # iotics-identity = { path = "../iotics-identity-go/ffi/rust" }
