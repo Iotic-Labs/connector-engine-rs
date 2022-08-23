@@ -13,7 +13,21 @@ A framework that greatly simplifies the process of writing high-performance, sca
 - [Golang][golang]
 - [Clang][clang]
 
-## Example
+## Usage
+
+Without TLS
+
+```bash
+iotics-connector-engine = { git = "https://github.com/Iotic-Labs/connector-engine-rs.git" }
+```
+
+With TLS
+
+```bash
+iotics-connector-engine = { git = "https://github.com/Iotic-Labs/connector-engine-rs.git", features = ["tls"] }
+```
+
+## Examples
 
 TODO
 
