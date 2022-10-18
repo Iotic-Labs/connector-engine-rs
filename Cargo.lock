@@ -539,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "iotics-connector-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "actix",
  "actix-rt",
@@ -557,14 +557,15 @@ dependencies = [
 
 [[package]]
 name = "iotics-grpc-client"
-version = "0.3.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ae82e5b00e03dc7e967f8e2e6ff24a1dca6cfa606e117f09cbe8a9f1791fd5c"
+checksum = "311c8d359451d9789cab5ce08f22e6b62b5b6598f10a1f357df7193f8525e696"
 dependencies = [
  "anyhow",
  "prost",
  "rand",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tonic",
