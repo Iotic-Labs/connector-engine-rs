@@ -1,5 +1,4 @@
 use iotics_grpc_client::properties::PropertyBuilder;
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 use iotics_grpc_client::common::{FeedValue, Property, Visibility};
 use iotics_grpc_client::properties::common_keys;
@@ -105,10 +104,6 @@ impl Model {
     /// label, model, created_at, updated_at
     /// IF they were passed `twin_properties` when the `Model` instance was created
     pub fn build_twin_properties(&self, model_did: &str, twin_label: &str) -> Vec<Property> {
-        let time_now = OffsetDateTime::now_utc()
-            .format(&Rfc3339)
-            .expect("this should not happen");
-
         self.twin_properties
             .clone()
             .into_iter()
@@ -121,20 +116,6 @@ impl Model {
                         common_keys::predicate::MODEL_PROPERTY,
                         model_did,
                     ),
-                    common_keys::predicate::CREATED_AT_PROPERTY => {
-                        PropertyBuilder::build_literal_value(
-                            common_keys::predicate::CREATED_AT_PROPERTY,
-                            "dateTime",
-                            &time_now,
-                        )
-                    }
-                    common_keys::predicate::UPDATED_AT_PROPERTY => {
-                        PropertyBuilder::build_literal_value(
-                            common_keys::predicate::UPDATED_AT_PROPERTY,
-                            "dateTime",
-                            &time_now,
-                        )
-                    }
                     _ => property,
                 };
 
