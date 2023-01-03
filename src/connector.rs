@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use iotics_grpc_client::common::{GeoLocation, Property};
+use iotics_grpc_client::{GeoLocation, Property};
 use serde_json::Value as SerdeValue;
 use std::collections::HashMap;
 use std::fmt::Debug;

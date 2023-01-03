@@ -5,17 +5,14 @@ use std::time::{Duration, SystemTime};
 
 use actix::clock::{interval, sleep};
 use actix::{Actor, Addr, AsyncContext, Context, Handler, System, WrapFuture};
+use iotics_grpc_client::twin::share::share_data_with_channel;
+use iotics_grpc_client::twin::upsert::upsert_twin_with_channel;
 use iotics_identity::create_twin_did_with_control_delegation;
 use log::{debug, error, info, warn};
 use serde_json::json;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-use iotics_grpc_client::common::Channel;
-use iotics_grpc_client::twin::share::share_data_with_client;
-use iotics_grpc_client::twin::upsert::upsert_twin_with_client;
-use iotics_grpc_client::twin::{
-    create_feed_api_client, create_twin_api_client, FeedApiClient, TwinApiClient,
-};
+use iotics_grpc_client::{create_channel, Channel};
 
 use crate::config::AuthBuilder;
 use crate::connector::Connector;
@@ -45,8 +42,8 @@ pub struct ModelActor {
     fetch_every_secs: u64,
     delete_twins: bool,
     twins: HashMap<String, TwinActorInfo>,
-    twin_channel: Option<TwinApiClient<Channel>>,
-    feed_channel: Option<FeedApiClient<Channel>>,
+    twin_channel: Option<Channel>,
+    feed_channel: Option<Channel>,
     concurrent_new_twins: usize,
     concurrent_shares: usize,
     previously_unhandled_twins: usize,
@@ -90,7 +87,7 @@ impl Actor for ModelActor {
 
         // create the channels
         let fut = async move {
-            let twin_channel = create_twin_api_client(auth_builder.clone())
+            let twin_channel = create_channel(auth_builder.clone(), None, None, None)
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
@@ -98,7 +95,7 @@ impl Actor for ModelActor {
                         &model_label, e
                     )
                 });
-            let feed_channel = create_feed_api_client(auth_builder)
+            let feed_channel = create_channel(auth_builder.clone(), None, None, None)
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
@@ -132,7 +129,7 @@ impl Handler<ChannelsCreatedMessage> for ModelActor {
     type Result = ();
 
     fn handle(&mut self, message: ChannelsCreatedMessage, ctx: &mut Context<Self>) -> Self::Result {
-        let mut twin_channel = message.twin_channel;
+        let twin_channel = message.twin_channel;
         let feed_channel = message.feed_channel;
 
         self.twin_channel.replace(twin_channel.clone());
@@ -156,15 +153,14 @@ impl Handler<ChannelsCreatedMessage> for ModelActor {
                     AGENT_TWIN_NAME,
                 )?;
 
-                upsert_twin_with_client(
+                upsert_twin_with_channel(
                     auth_builder,
-                    &mut twin_channel,
+                    twin_channel,
                     &model_did,
                     model.get_model_properties().clone(),
                     model.get_feeds(true),
                     Vec::new(),
                     None,
-                    model.get_visibility() as i32,
                 )
                 .await?;
 
@@ -428,7 +424,7 @@ impl Handler<HeartbeatData> for ModelActor {
     type Result = ();
 
     fn handle(&mut self, message: HeartbeatData, ctx: &mut Context<Self>) -> Self::Result {
-        let mut feed_channel = self
+        let feed_channel = self
             .feed_channel
             .as_ref()
             .expect("this should not happen")
@@ -449,9 +445,9 @@ impl Handler<HeartbeatData> for ModelActor {
         .to_vec();
 
         let fut = async move {
-            let result = share_data_with_client(
+            let result = share_data_with_channel(
                 auth_builder,
-                &mut feed_channel,
+                feed_channel,
                 &model_did,
                 "heartbeat",
                 data,

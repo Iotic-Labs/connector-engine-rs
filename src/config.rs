@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use iotics_grpc_client::auth_builder::IntoAuthBuilder;
+use iotics_grpc_client::IntoAuthBuilder;
 use iotics_identity::{create_agent_auth_token, Config};
 
 use crate::constants::AGENT_KEY_NAME;
@@ -55,7 +55,7 @@ impl IntoAuthBuilder for AuthBuilder {
 
             let identity_config = Config {
                 resolver_address: api_config_lock.identity_config.resolver_address.clone(),
-                token_duration: api_config_lock.identity_config.token_duration as i64,
+                token_duration: api_config_lock.identity_config.token_duration,
                 user_did: api_config_lock.identity_config.user_did.clone(),
                 agent_did: api_config_lock.identity_config.agent_did.clone(),
                 agent_key_name: api_config_lock.identity_config.agent_key_name.clone(),

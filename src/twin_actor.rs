@@ -1,13 +1,12 @@
 use actix::{Actor, ActorContext, Addr, AsyncContext, Context, Handler, WrapFuture};
+use iotics_grpc_client::twin::crud::{delete_twin_with_channel, update_twin_with_channel};
+use iotics_grpc_client::twin::share::share_data_with_channel;
+use iotics_grpc_client::twin::upsert::upsert_twin_with_channel;
 use log::{debug, error, warn};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use iotics_grpc_client::common::{Channel, PropertyUpdate};
-use iotics_grpc_client::twin::crud::{delete_twin_with_client, update_twin_with_client};
-use iotics_grpc_client::twin::share::share_data_with_client;
-use iotics_grpc_client::twin::upsert::upsert_twin_with_client;
-use iotics_grpc_client::twin::{FeedApiClient, TwinApiClient};
+use iotics_grpc_client::{Channel, PropertyUpdate};
 use iotics_identity::create_twin_did_with_control_delegation;
 
 use crate::config::AuthBuilder;
@@ -26,8 +25,8 @@ pub struct TwinActor {
     auth_builder: Arc<AuthBuilder>,
     twin: Twin,
     model: Model,
-    twin_channel: TwinApiClient<Channel>,
-    feed_channel: FeedApiClient<Channel>,
+    twin_channel: Channel,
+    feed_channel: Channel,
     twin_did: Option<String>,
     last_data_received_at: SystemTime,
     creation_in_flight: bool,
@@ -40,8 +39,8 @@ impl TwinActor {
         auth_builder: Arc<AuthBuilder>,
         twin: Twin,
         model: Model,
-        twin_channel: TwinApiClient<Channel>,
-        feed_channel: FeedApiClient<Channel>,
+        twin_channel: Channel,
+        feed_channel: Channel,
     ) -> Self {
         Self {
             model_addr,
@@ -71,7 +70,7 @@ impl Actor for TwinActor {
         let auth_builder = self.auth_builder.clone();
         let twin = self.twin.clone();
         let model = self.model.clone();
-        let mut twin_channel = self.twin_channel.clone();
+        let twin_channel = self.twin_channel.clone();
 
         let fut = async move {
             let properties = model.build_twin_properties(&twin.model_did, &twin.label);
@@ -86,15 +85,14 @@ impl Actor for TwinActor {
                     AGENT_TWIN_NAME,
                 )?;
 
-                upsert_twin_with_client(
+                upsert_twin_with_channel(
                     auth_builder,
-                    &mut twin_channel,
+                    twin_channel,
                     &twin_did,
                     properties,
                     model.get_feeds(false),
                     Vec::new(),
                     twin.location,
-                    model.get_visibility() as i32,
                 )
                 .await?;
 
@@ -210,16 +208,16 @@ impl Handler<TwinData> for TwinActor {
         let label = self.twin.label.clone();
         let twin_did = twin_did.clone();
 
-        let mut twin_channel = self.twin_channel.clone();
-        let mut feed_channel = self.feed_channel.clone();
+        let twin_channel = self.twin_channel.clone();
+        let feed_channel = self.feed_channel.clone();
 
         let fut = async move {
             for (feed_id, feed_data) in &message.data.feeds {
                 let data = feed_data.to_string().as_bytes().to_vec();
 
-                let result = share_data_with_client(
+                let result = share_data_with_channel(
                     auth_builder.clone(),
-                    &mut feed_channel,
+                    feed_channel.clone(),
                     &twin_did,
                     feed_id,
                     data,
@@ -243,9 +241,9 @@ impl Handler<TwinData> for TwinActor {
                     .map(|p| p.key)
                     .collect();
 
-                let result = update_twin_with_client(
+                let result = update_twin_with_channel(
                     auth_builder,
-                    &mut twin_channel,
+                    twin_channel,
                     &twin_did,
                     PropertyUpdate {
                         cleared_all: false,
@@ -314,12 +312,12 @@ impl Handler<Cleanup> for TwinActor {
             if message.delete_twins {
                 let twin_did = self.twin_did.clone().expect("This should not happen");
                 let auth_builder = self.auth_builder.clone();
-                let mut twin_channel = self.twin_channel.clone();
+                let twin_channel = self.twin_channel.clone();
                 let addr = ctx.address();
 
                 let fut = async move {
                     let result =
-                        delete_twin_with_client(auth_builder.clone(), &mut twin_channel, &twin_did)
+                        delete_twin_with_channel(auth_builder.clone(), twin_channel, &twin_did)
                             .await;
                     if let Err(e) = result {
                         error!("Failed to delete twin {} {:?}.", &twin_did, e);

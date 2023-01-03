@@ -1,4 +1,4 @@
-use iotics_grpc_client::common::GeoLocation;
+use iotics_grpc_client::GeoLocation;
 
 #[derive(Debug, Clone)]
 pub struct Twin {
