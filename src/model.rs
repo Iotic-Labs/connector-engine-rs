@@ -1,8 +1,8 @@
 use iotics_grpc_client::properties::PropertyBuilder;
 
-use iotics_grpc_client::common::{FeedValue, Property, Visibility};
 use iotics_grpc_client::properties::common_keys;
 use iotics_grpc_client::twin::UpsertFeedWithMeta;
+use iotics_grpc_client::{FeedValue, Property};
 
 use crate::constants::{LANGUAGE, MAX_LABEL_LENGTH};
 
@@ -10,7 +10,6 @@ use crate::constants::{LANGUAGE, MAX_LABEL_LENGTH};
 pub struct Model {
     seed_prefix: String,
     label_prefix: String,
-    visibility: Visibility,
     model_properties: Vec<Property>,
     feeds: Vec<UpsertFeedWithMeta>,
     twin_properties: Vec<Property>,
@@ -20,7 +19,6 @@ impl Model {
     pub fn new(
         seed_prefix: String,
         label_prefix: String,
-        visibility: Visibility,
         model_properties: Vec<Property>,
         feeds: Vec<UpsertFeedWithMeta>,
         twin_properties: Vec<Property>,
@@ -28,7 +26,6 @@ impl Model {
         Self {
             seed_prefix,
             label_prefix,
-            visibility,
             model_properties,
             feeds,
             twin_properties,
@@ -41,10 +38,6 @@ impl Model {
 
     pub fn get_label(&self) -> String {
         format!("{} Model", self.label_prefix)
-    }
-
-    pub fn get_visibility(&self) -> Visibility {
-        self.visibility
     }
 
     pub fn get_twin_seed(&self, twin_id: &str) -> String {

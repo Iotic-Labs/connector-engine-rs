@@ -1,16 +1,15 @@
 use actix::Message;
 use std::time::{Duration, SystemTime};
 
-use iotics_grpc_client::common::Channel;
-use iotics_grpc_client::twin::{FeedApiClient, TwinApiClient};
+use iotics_grpc_client::Channel;
 
 use crate::connector::ConnectorData;
 
 #[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct ChannelsCreatedMessage {
-    pub twin_channel: TwinApiClient<Channel>,
-    pub feed_channel: FeedApiClient<Channel>,
+    pub twin_channel: Channel,
+    pub feed_channel: Channel,
 }
 
 #[derive(Debug, Message)]
