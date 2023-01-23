@@ -1,6 +1,6 @@
 [package]
 name = "iotics-connector-engine"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 description = "IOTICS Connector Engine"
 license = "Apache-2.0"
@@ -25,7 +25,7 @@ tokio = { version = "1.21", features = ["macros", "rt-multi-thread", "time"] }
 
 # use this if you want to be able to change both repos in the same time
 # iotics-grpc-client = { path = "../iotics-grpc-client-rs" }
-iotics-grpc-client = "3.1"
+iotics-grpc-client = "4.0"
 
 # use this if you want to be able to change both repos in the same time
 # iotics-identity = { path = "../iotics-identity-go/ffi/rust" }

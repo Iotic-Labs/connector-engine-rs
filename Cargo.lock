@@ -540,7 +540,7 @@ dependencies = [
 
 [[package]]
 name = "iotics-connector-engine"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "actix",
  "actix-rt",
@@ -558,9 +558,9 @@ dependencies = [
 
 [[package]]
 name = "iotics-grpc-client"
-version = "3.1.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa3d55354fe5ed563b055f8d4b2dcdbde68bd0cfaa39711caded5a53de0e53f3"
+checksum = "d9003fdb3b3609938b256f895aef872b2417ba6544ed1e3968b75e467dcb0664"
 dependencies = [
  "anyhow",
  "prost",
@@ -580,6 +580,7 @@ source = "git+https://github.com/Iotic-Labs/iotics-identity-go.git#72bf190cda49e
 dependencies = [
  "bindgen",
  "cargo-emit",
+ "libc",
  "thiserror",
 ]
 
