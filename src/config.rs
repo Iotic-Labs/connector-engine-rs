@@ -64,7 +64,7 @@ impl IntoAuthBuilder for AuthBuilder {
             };
 
             let token = create_agent_auth_token(&identity_config)?;
-            let token = format!("bearer {}", token);
+            let token = format!("bearer {token}");
 
             token_lock.replace(token);
         }
@@ -85,7 +85,7 @@ fn get_api_config() -> ApiConfig {
     dotenv::dotenv().ok();
 
     let parse_env = |key: &str| -> String {
-        std::env::var(key).unwrap_or_else(|_| panic!("env var {} is missing", key))
+        std::env::var(key).unwrap_or_else(|_| panic!("env var {key} is missing"))
     };
 
     ApiConfig {

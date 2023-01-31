@@ -580,7 +580,6 @@ source = "git+https://github.com/Iotic-Labs/iotics-identity-go.git#72bf190cda49e
 dependencies = [
  "bindgen",
  "cargo-emit",
- "libc",
  "thiserror",
 ]
 
