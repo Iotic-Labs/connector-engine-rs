@@ -8,10 +8,10 @@ A framework that greatly simplifies the process of writing high-performance, sca
 
 ## Prerequisites
 
-- [Rust][toolchain]
-- [cargo-make][cargo-make]
-- [Golang][golang]
-- [Clang][clang]
+-   [Rust][toolchain]
+-   [cargo-make][cargo-make]
+-   [Golang][golang]
+-   [Clang][clang]
 
 ## Usage
 
@@ -41,3 +41,10 @@ TODO
 [cargo-make]: https://github.com/sagiegurari/cargo-make
 [golang]: https://golang.org/doc/install
 [clang]: https://clang.llvm.org/get_started.html
+
+### OSS Review
+
+```
+  cargo install cargo-license
+  cargo license -t --avoid-build-deps --avoid-dev-deps --direct-deps-only
+```
