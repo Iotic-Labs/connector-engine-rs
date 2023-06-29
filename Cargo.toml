@@ -1,6 +1,6 @@
 [package]
 name = "iotics-connector-engine"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = "IOTICS Connector Engine"
 license = "Apache-2.0"
